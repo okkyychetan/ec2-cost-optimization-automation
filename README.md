@@ -48,15 +48,12 @@ EventBridge → Lambda Function → EC2 Start/Stop API
 
 ### EC2 Instance
 
-
-
-### Lambda Function
-
+![image alt](https://github.com/okkyychetan/ec2-cost-optimization-automation/blob/df155b7ed5a525f8cb113e2e42d1c7ebe2b4aeb6/Screenshot%202026-03-05%20150552.png)
 
 
 ### EventBridge Scheduler
 
-
+![image alt](https://github.com/okkyychetan/ec2-cost-optimization-automation/blob/df155b7ed5a525f8cb113e2e42d1c7ebe2b4aeb6/Screenshot%202026-03-05%20150655.png)
 
 ---
 
