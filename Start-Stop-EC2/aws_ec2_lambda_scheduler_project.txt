@@ -1,0 +1,263 @@
+AWS EC2 Cost Optimization using Lambda and EventBridge Scheduler
+
+This project demonstrates how to automatically start and stop EC2
+instances based on tags using AWS Lambda and EventBridge Scheduler. This
+helps reduce AWS costs by ensuring that development instances run only
+during working hours.
+
+Services Used - Amazon EC2 - AWS Lambda - Amazon EventBridge Scheduler -
+AWS IAM - Amazon CloudWatch
+
+Workflow 1. EC2 instances are tagged with an environment label called
+“env”. 2. Lambda identifies instances using this tag. 3. Lambda starts
+or stops the instances. 4. EventBridge Scheduler triggers Lambda
+automatically at scheduled times.
+
+STEP 1 – CREATE EC2 INSTANCES WITH TAGS
+
+First we create EC2 instances that will later be controlled by Lambda.
+
+1.  Open EC2 Console Go to AWS Console → EC2 → Instances → Launch
+    Instance.
+
+2.  Create Development Instances
+
+Create 2 EC2 instances and add the following tag:
+
+Key: env Value: dev
+
+Steps: - Launch an EC2 instance. - Scroll to the Tags section. - Click
+Add Tag. - Enter the key as “env”. - Enter the value as “dev”.
+
+Create two instances with this tag.
+
+3.  Create Test Instances
+
+Repeat the process but use the following tag:
+
+Key: env Value: test
+
+Create two instances with this tag.
+
+Final Result
+
+You should now have four instances:
+
+Instance 1 – env = dev Instance 2 – env = dev Instance 3 – env = test
+Instance 4 – env = test
+
+Total: 4 EC2 instances.
+
+The dev instances will later be automatically started and stopped using
+Lambda.
+
+STEP 2 – CREATE IAM POLICY
+
+Lambda needs permission to manage EC2 instances.
+
+1.  Go to AWS Console → IAM → Policies.
+2.  Click Create Policy.
+3.  Select JSON Editor.
+4.  Paste the following policy.
+
+{ “Version”: “2012-10-17”, “Statement”: [ { “Sid”:
+“StartStopDescribeInstances”, “Effect”: “Allow”, “Action”: [
+“ec2:StartInstances”, “ec2:StopInstances”, “ec2:DescribeInstances” ],
+“Resource”: “*” } ] }
+
+5.  Click Next.
+6.  Name the policy (example: EC2-StartStop-Lambda-Policy).
+7.  Click Create Policy.
+
+STEP 3 – CREATE IAM ROLE FOR LAMBDA
+
+Now create a role that Lambda will assume.
+
+1.  Go to IAM → Roles.
+2.  Click Create Role.
+3.  Select AWS Service.
+4.  Choose Lambda as the service.
+5.  Click Next.
+
+Attach Permissions
+
+1.  Search for the policy created earlier: EC2-StartStop-Lambda-Policy
+2.  Select the policy.
+3.  Click Next.
+
+Name the Role
+
+Example role name: Lambda-EC2-StartStop-Role
+
+Click Create Role.
+
+STEP 4 – CREATE LAMBDA FUNCTION (START INSTANCES)
+
+Now create the Lambda function that starts instances tagged with
+env=dev.
+
+1.  Go to AWS Console → Lambda.
+2.  Click Create Function.
+3.  Select Author from Scratch.
+
+Configuration:
+
+Function Name: start-dev-ec2 Runtime: Python 3.11 Execution Role: Use
+existing role Role: Lambda-EC2-StartStop-Role
+
+Click Create Function.
+
+Add Lambda Code
+
+Replace the default code with the following.
+
+import boto3
+
+aws_region = ‘us-east-1’ tag_key = ‘env’ tag_value = ‘dev’
+
+ec2 = boto3.client(‘ec2’, region_name=aws_region)
+
+def lambda_handler(event, context):
+
+    instances_to_start = get_instances_with_tag(tag_key, tag_value)
+
+    if instances_to_start:
+        start_instances(instances_to_start)
+        return {
+            'statusCode': 200,
+            'body': 'Started instances: {}'.format(instances_to_start)
+        }
+    else:
+        return {
+            'statusCode': 200,
+            'body': 'No instances found'
+        }
+
+def get_instances_with_tag(key, value):
+
+    response = ec2.describe_instances(
+        Filters=[
+            {
+                'Name': 'tag:' + key,
+                'Values': [value]
+            }
+        ]
+    )
+
+    instances = []
+
+    for reservation in response['Reservations']:
+        for instance in reservation['Instances']:
+            instances.append(instance['InstanceId'])
+
+    return instances
+
+def start_instances(instance_ids):
+
+    ec2.start_instances(InstanceIds=instance_ids)
+
+STEP 5 – TEST LAMBDA FUNCTION
+
+Before scheduling automation, test the Lambda function.
+
+1.  Stop your dev EC2 instances.
+2.  Click Test in the Lambda console.
+3.  Create a test event.
+
+Example event:
+
+{ “test”: “start” }
+
+4.  Click Test again.
+
+Result: The dev instances should start automatically.
+
+STEP 6 – CREATE LAMBDA FUNCTION (STOP INSTANCES)
+
+Create another Lambda function.
+
+Example function name: stop-dev-ec2
+
+Use the following code.
+
+import boto3
+
+aws_region = ‘us-east-1’ tag_key = ‘env’ tag_value = ‘dev’
+
+ec2 = boto3.client(‘ec2’, region_name=aws_region)
+
+def lambda_handler(event, context):
+
+    instances_to_stop = get_instances_with_tag(tag_key, tag_value)
+
+    if instances_to_stop:
+        stop_instances(instances_to_stop)
+        return {
+            'statusCode': 200,
+            'body': 'Stopped instances: {}'.format(instances_to_stop)
+        }
+    else:
+        return {
+            'statusCode': 200,
+            'body': 'No instances found'
+        }
+
+def get_instances_with_tag(key, value):
+
+    response = ec2.describe_instances(
+        Filters=[
+            {
+                'Name': 'tag:' + key,
+                'Values': [value]
+            }
+        ]
+    )
+
+    instances = []
+
+    for reservation in response['Reservations']:
+        for instance in reservation['Instances']:
+            instances.append(instance['InstanceId'])
+
+    return instances
+
+def stop_instances(instance_ids):
+
+    ec2.stop_instances(InstanceIds=instance_ids)
+
+STEP 7 – SCHEDULE LAMBDA WITH EVENTBRIDGE
+
+1.  Go to AWS Console → EventBridge → Scheduler.
+2.  Click Create Schedule.
+
+Schedule Configuration
+
+Schedule Type: Recurring Schedule Pattern: Cron
+
+Cron Expression: 0 8 ? * 2-6 *
+
+Meaning: Start instances at 8 AM Monday to Friday.
+
+Target Configuration
+
+Target API: AWS Lambda Select Lambda function: start-dev-ec2
+
+Click Create Schedule.
+
+STEP 8 – CREATE STOP SCHEDULE
+
+Create another schedule.
+
+Cron Expression: 0 18 ? * 2-6 *
+
+Meaning: Stop instances at 6 PM Monday to Friday.
+
+Target Lambda Function: stop-dev-ec2
+
+FINAL RESULT
+
+The system will automatically: Start dev instances at 8 AM. Stop dev
+instances at 6 PM.
+
+This helps reduce AWS costs by ensuring development instances only run
+during working hours.
